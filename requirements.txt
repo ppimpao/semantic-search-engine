@@ -1,0 +1,6 @@
+# Pinned for reproducibility; mirrors pyproject.toml.
+sentence-transformers>=5.0,<6.0
+chromadb>=1.5,<2.0
+requests>=2.32,<3.0
+pyyaml>=6.0,<7.0
+pytest>=8.0
