@@ -1,0 +1,237 @@
+# Labelled mini-corpus for the eval harness.
+# Distinct space-domain passages with stable ids; each acts as a distractor for
+# queries it does not answer. Passages are written as statements (answers);
+# eval/queries.yaml asks about them as questions (asymmetric) to exercise the
+# relevance/QA model.
+documents:
+  - id: c01
+    title: Detecting exoplanets by transit photometry
+    text: >
+      When a planet crosses in front of its host star it blocks a tiny fraction
+      of the starlight, producing a periodic dip in the measured brightness. The
+      depth of this dimming reveals the planet's radius and the period gives its
+      orbit. Space photometers such as Kepler monitored thousands of stars to
+      find these recurring transits.
+
+  - id: c02
+    title: The radial velocity method for finding planets
+    text: >
+      An orbiting planet tugs its star, making the star wobble toward and away
+      from us. This motion shifts the stellar spectral lines back and forth by
+      the Doppler effect, and the size of the shift constrains the planet's mass.
+      Precise spectrographs can detect velocity changes of only a few metres per
+      second.
+
+  - id: c03
+    title: Imaging the shadow of a supermassive black hole
+    text: >
+      A global network of radio dishes acting as a single Earth-sized
+      interferometer resolved the bright ring of emission surrounding the dark
+      central shadow of the giant black hole in galaxy M87. The ring diameter
+      matches the predicted size of the photon orbit around an object of billions
+      of solar masses.
+
+  - id: c04
+    title: Gravitational waves from merging black holes
+    text: >
+      When two black holes spiral together and coalesce they radiate ripples in
+      spacetime that stretch and squeeze distances by a tiny fraction. Kilometre
+      scale laser interferometers detect the characteristic chirp as the
+      frequency sweeps upward in the final moments before merger.
+
+  - id: c05
+    title: Galaxy rotation curves and missing mass
+    text: >
+      Stars and gas in the outskirts of spiral galaxies orbit far faster than the
+      visible matter can explain, and the rotation speed stays flat instead of
+      falling off. This discrepancy is the classic evidence that galaxies are
+      embedded in massive halos of unseen, non-luminous matter.
+
+  - id: c06
+    title: The accelerating expansion of the universe
+    text: >
+      Distant supernova measurements showed the cosmic expansion is speeding up
+      rather than slowing under gravity, implying a repulsive dark energy that
+      dominates the energy budget today. This discovery reshaped the standard
+      model of cosmology.
+
+  - id: c07
+    title: The cosmic microwave background radiation
+    text: >
+      The relic glow left over from the hot early universe fills the sky as a
+      near uniform thermal radiation at about three degrees above absolute zero.
+      Tiny temperature fluctuations across it encode the seeds of all later
+      structure and tightly constrain cosmological parameters.
+
+  - id: c08
+    title: Formation of light elements in the early universe
+    text: >
+      In the first few minutes after the Big Bang the universe was hot and dense
+      enough for nuclear reactions to forge hydrogen, helium, and a trace of
+      lithium. The predicted abundances of these primordial nuclei agree closely
+      with what is observed in pristine gas.
+
+  - id: c09
+    title: How stars produce energy by fusion
+    text: >
+      A star shines because hydrogen nuclei fuse into helium in its dense, hot
+      core, releasing energy that holds the star up against its own gravity.
+      Heavier elements are built up in successive burning stages over the star's
+      life.
+
+  - id: c10
+    title: Type Ia supernovae as standard candles
+    text: >
+      A white dwarf that accretes matter past a critical limit detonates as a
+      thermonuclear supernova with a remarkably consistent peak luminosity. Because
+      their intrinsic brightness is calibratable, these explosions serve as
+      distance markers across billions of light years.
+
+  - id: c11
+    title: Pulsars and rapidly spinning neutron stars
+    text: >
+      A neutron star is the ultradense collapsed core left after a massive star
+      explodes, packing more than the Sun's mass into a city sized sphere. When
+      its beamed radio emission sweeps past Earth we see regular pulses, making it
+      a precise cosmic clock.
+
+  - id: c12
+    title: The formation and assembly of galaxies
+    text: >
+      Galaxies grow hierarchically as small clumps of gas and dark matter merge
+      into ever larger systems over cosmic time. Cooling gas settles into rotating
+      disks where stars form, while collisions can transform disks into elliptical
+      shapes.
+
+  - id: c13
+    title: Active galactic nuclei and quasars
+    text: >
+      Some galaxies host an extremely luminous compact core powered by gas
+      spiralling into a central supermassive black hole. The infalling material
+      heats up and can launch relativistic jets, outshining the entire surrounding
+      galaxy.
+
+  - id: c14
+    title: Star formation inside molecular clouds
+    text: >
+      Stars are born when cold, dense clumps within giant clouds of molecular
+      hydrogen collapse under their own gravity. As a clump contracts it heats up
+      and eventually ignites fusion, while leftover material forms a surrounding
+      disk.
+
+  - id: c15
+    title: Protoplanetary disks around young stars
+    text: >
+      A newborn star is encircled by a flattened disk of gas and dust that is the
+      birthplace of planets. Dust grains stick together and grow into larger
+      bodies, carving gaps and rings in the disk as planets assemble.
+
+  - id: c16
+    title: Evidence for past liquid water on Mars
+    text: >
+      Dry channels, layered sediments, and clay minerals on the Martian surface
+      indicate that liquid water once flowed and pooled there. Rovers have found
+      rounded pebbles and mineral veins that only form in the presence of water.
+
+  - id: c17
+    title: The solar wind and space weather
+    text: >
+      The Sun continuously blows a stream of charged particles outward through the
+      solar system, shaping planetary magnetospheres and driving auroras. Bursts
+      from solar flares and coronal mass ejections can disrupt satellites and power
+      grids.
+
+  - id: c18
+    title: Asteroids and the small bodies of the solar system
+    text: >
+      Most asteroids orbit in a belt between Mars and Jupiter, rocky remnants left
+      over from the formation of the planets. Studying their composition reveals
+      the conditions in the early solar nebula and the building blocks of worlds.
+
+  - id: c19
+    title: The origin of high energy cosmic rays
+    text: >
+      Cosmic rays are charged particles accelerated to enormous energies that
+      bombard Earth from space. Shock waves in supernova remnants are thought to
+      boost many of them, though the sources of the very highest energy particles
+      remain debated.
+
+  - id: c20
+    title: Hubble's law and the expanding universe
+    text: >
+      Galaxies recede from us with a speed proportional to their distance, seen as
+      a stretching of their light to longer wavelengths. This redshift distance
+      relation is the foundational evidence that the universe is expanding.
+
+  - id: c21
+    title: Gravitational lensing by massive objects
+    text: >
+      A foreground mass bends the path of light from a more distant source,
+      magnifying and distorting its image into arcs or multiple copies. The
+      strength of the bending probes the total mass, including dark matter, along
+      the line of sight.
+
+  - id: c22
+    title: Dust and gas in the interstellar medium
+    text: >
+      The space between stars is filled with thin gas and microscopic dust grains
+      that redden and dim starlight passing through. This material is the raw
+      reservoir from which new stars and planets eventually condense.
+
+  - id: c23
+    title: Globular clusters and old stellar populations
+    text: >
+      Globular clusters are dense, roughly spherical swarms of hundreds of
+      thousands of ancient stars bound together in the halo of a galaxy. Their
+      uniformly old ages make them probes of the early epochs of galaxy formation.
+
+  - id: c24
+    title: White dwarfs, the remnants of Sun-like stars
+    text: >
+      When a low mass star exhausts its fuel it sheds its outer layers and leaves
+      behind a hot, Earth sized core supported by electron degeneracy pressure.
+      This white dwarf slowly cools and fades over billions of years.
+
+  - id: c25
+    title: Fast radio bursts from distant galaxies
+    text: >
+      Fast radio bursts are millisecond flashes of radio emission arriving from
+      far outside our galaxy, releasing enormous energy in an instant. At least
+      some repeat, and magnetars are a leading candidate for what produces them.
+
+  - id: c26
+    title: The epoch of reionization and the first stars
+    text: >
+      After the universe cooled it entered a dark age until the first stars and
+      galaxies switched on and flooded space with ultraviolet light. That radiation
+      reionized the surrounding hydrogen, ending the dark ages.
+
+  - id: c27
+    title: The structure of the Milky Way
+    text: >
+      Our galaxy is a barred spiral with a central bulge, a flattened disk of
+      stars and gas wound into spiral arms, and a surrounding halo. The Sun sits
+      partway out in the disk and orbits the centre every few hundred million
+      years.
+
+  - id: c28
+    title: Brown dwarfs, the failed stars
+    text: >
+      Brown dwarfs form like stars but are too low in mass to sustain ordinary
+      hydrogen fusion, so they glow faintly and cool with age. They bridge the gap
+      between the heaviest planets and the lightest true stars.
+
+  - id: c29
+    title: Habitable zones and biosignatures
+    text: >
+      The habitable zone is the range of orbits where a planet could hold liquid
+      water on its surface. Searching the atmospheres of such planets for gases
+      like oxygen or methane is a strategy for detecting possible life elsewhere.
+
+  - id: c30
+    title: Infrared astronomy with space telescopes
+    text: >
+      Observing in the infrared lets telescopes peer through obscuring dust and
+      capture light from the most distant, highly redshifted galaxies. Cooled
+      space observatories above the atmosphere are needed because the warm Earth
+      and air swamp these faint signals.
