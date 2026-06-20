@@ -107,6 +107,17 @@ def test_parse_arxiv_entry():
     assert NS["atom"]  # namespace map is wired up
 
 
+def test_search_query_covers_astro_ph_subcategories():
+    from src.fetch_corpus import search_query
+
+    q = search_query()
+    # Must target the modern subcategories, not the legacy bare `cat:astro-ph`
+    # (which misses post-2009 papers).
+    assert "cat:astro-ph.GA" in q and "cat:astro-ph.CO" in q
+    assert " OR " in q
+    assert "cat:astro-ph " not in q and not q.endswith("cat:astro-ph")
+
+
 def test_evaluate_runs_over_eval_corpus():
     corpus = evalmod.load_corpus()
     coll = evalmod.build_collection(corpus, embed_fn=fake_embed)
