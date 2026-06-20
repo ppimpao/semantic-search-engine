@@ -95,7 +95,14 @@ def build_collection(corpus: list[dict], embed_fn=embed):
     real astro_ph DB — each eval run starts from a clean, isolated index so the
     numbers are reproducible. Same cosine metric as production.
     """
-    coll = chromadb.EphemeralClient().create_collection(
+    client = chromadb.EphemeralClient()
+    # The in-memory client is shared in-process, so a previous build (e.g. the
+    # first model under --compare) leaves an "eval" collection behind. Drop it
+    # first to guarantee a *fresh* index — reusing it would mix the two models'
+    # vectors and corrupt the second model's score.
+    client.get_or_create_collection("eval")
+    client.delete_collection("eval")
+    coll = client.create_collection(
         name="eval", metadata={"hnsw:space": config.DISTANCE_SPACE}
     )
     coll.add(

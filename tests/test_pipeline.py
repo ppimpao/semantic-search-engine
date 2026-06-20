@@ -124,3 +124,11 @@ def test_evaluate_runs_over_eval_corpus():
     metrics = evalmod.evaluate(evalmod.load_queries(), coll, embed_fn=fake_embed)
     assert metrics["n"] == len(evalmod.load_queries())
     assert 0.0 <= metrics["MRR"] <= 1.0
+
+
+def test_build_collection_twice_no_collision():
+    # The --compare path builds the collection once per model; the shared
+    # in-memory client must not raise "Collection [eval] already exists".
+    corpus = evalmod.load_corpus()
+    evalmod.build_collection(corpus, embed_fn=fake_embed)
+    evalmod.build_collection(corpus, embed_fn=fake_embed)  # must not raise
