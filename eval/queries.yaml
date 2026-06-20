@@ -1,0 +1,50 @@
+# Labelled query set for the eval harness.
+# Each query is a natural-language question; `relevant` lists the corpus passage
+# id(s) (eval/corpus.yaml) that actually answer it. Queries are phrased to share
+# little surface form with their answer, so a pure-similarity model under-ranks
+# the right passage while the relevance/QA model recovers it.
+queries:
+  - query: How do astronomers find planets around other stars by watching a star dim?
+    relevant: [c01]
+
+  - query: What makes a star wobble so we can weigh an unseen planet?
+    relevant: [c02]
+
+  - query: How did scientists take a picture of a black hole?
+    relevant: [c03]
+
+  - query: What did LIGO detect when two black holes crashed together?
+    relevant: [c04]
+
+  - query: Why do stars at the edge of a galaxy move too fast for the visible matter?
+    relevant: [c05]
+
+  - query: What is making the universe expand faster and faster?
+    relevant: [c06]
+
+  - query: What is the leftover heat from the beginning of the cosmos?
+    relevant: [c07]
+
+  - query: Where did the helium in the universe originally come from?
+    relevant: [c08, c09]
+
+  - query: How are explosions used to measure distances across the universe?
+    relevant: [c10]
+
+  - query: What is left behind after a massive star collapses and sends out radio pulses?
+    relevant: [c11]
+
+  - query: How can we tell how far away a galaxy is from the colour of its light?
+    relevant: [c20]
+
+  - query: How does a massive object bend light and create multiple images of a galaxy?
+    relevant: [c21]
+
+  - query: Was there ever water flowing on the red planet?
+    relevant: [c16]
+
+  - query: What short bursts of radio energy reach us from far across the universe?
+    relevant: [c25]
+
+  - query: Where could we look for signs of life beyond Earth?
+    relevant: [c29]

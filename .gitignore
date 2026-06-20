@@ -1,0 +1,10 @@
+# Corpus cache + persisted Chroma index (rebuilt by fetch_corpus / ingest)
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
