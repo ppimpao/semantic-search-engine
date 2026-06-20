@@ -31,11 +31,34 @@ import requests
 
 from . import config
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+ARXIV_API = "https://export.arxiv.org/api/query"
 # The arXiv API returns Atom XML; this namespace prefix lets ElementTree find
 # <entry>, <title>, etc. (every tag is namespaced under this URI).
 NS = {"atom": "http://www.w3.org/2005/Atom"}
-PAGE_SIZE = 100  # arXiv caps results per call; we page in chunks of this size
+# Per the API manual a single call returns at most 2000 results per slice (and
+# 30000 total); we page in chunks of this size, well under the cap.
+PAGE_SIZE = 200
+
+# In 2009 the astro-ph archive was split into these six subcategories. The bare
+# token `cat:astro-ph` only matches the *legacy* category and misses modern
+# papers, so we OR the subcategories to cover all of astrophysics.
+ASTRO_PH_SUBCATS = (
+    "astro-ph.GA",  # Astrophysics of Galaxies
+    "astro-ph.CO",  # Cosmology and Nongalactic Astrophysics
+    "astro-ph.EP",  # Earth and Planetary Astrophysics
+    "astro-ph.HE",  # High Energy Astrophysical Phenomena
+    "astro-ph.IM",  # Instrumentation and Methods for Astrophysics
+    "astro-ph.SR",  # Solar and Stellar Astrophysics
+)
+
+
+def search_query() -> str:
+    """Build the search_query: every astro-ph subcategory OR'd together.
+
+    e.g. "cat:astro-ph.GA OR cat:astro-ph.CO OR ...". requests URL-encodes this;
+    arXiv treats the OR as a boolean union, so we get all of astrophysics.
+    """
+    return " OR ".join(f"cat:{c}" for c in ASTRO_PH_SUBCATS)
 
 
 def _parse_entry(entry: ET.Element) -> dict:
@@ -68,7 +91,7 @@ def fetch(total: int = 500) -> list[dict]:
     records: list[dict] = []
     for start in range(0, total, PAGE_SIZE):
         params = {
-            "search_query": "cat:astro-ph",                  # the space category
+            "search_query": search_query(),                  # all astro-ph subcats
             "start": start,                                  # paging offset
             "max_results": min(PAGE_SIZE, total - start),    # don't overshoot total
             "sortBy": "submittedDate",
