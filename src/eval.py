@@ -132,6 +132,36 @@ def run_demo() -> None:
         print(f"{label:<34} answer ranked first in {answer_wins}/{len(demos)} cases")
 
 
+def run_debug() -> None:
+    """Per-query diagnostic: show each model's top-1 hit, side by side.
+
+    Aggregate Hit@k hides *which* queries fail at n=15. For every query we print
+    the gold id(s) and each model's top-1 (with ✓/✗), so disagreements and the
+    specific hard negatives a model falls for are visible.
+    """
+    corpus, queries = load_corpus(), load_queries()
+    models = [("multi-qa", config.MODEL_NAME), ("all-MiniLM", config.SIMILARITY_MODEL_NAME)]
+    # Process one model at a time: build_collection reuses the name "eval", so we
+    # can't hold two collections at once. Collect each model's top-1 per query.
+    tops: dict[str, list[str]] = {}
+    for name, model in models:
+        embed_fn = lambda t, _m=model: embed(t, _m)
+        coll = build_collection(corpus, embed_fn)
+        tops[name] = [
+            coll.query(query_embeddings=embed_fn([q["query"]]), n_results=1)["ids"][0][0]
+            for q in queries
+        ]
+    # Print a row per query: gold, then each model's top-1 with a hit marker.
+    print(f"{'query':<50} {'gold':<8} {'multi-qa':<12} all-MiniLM")
+    for i, q in enumerate(queries):
+        gold = set(q["relevant"])
+        cells = []
+        for name, _ in models:
+            hit = tops[name][i]
+            cells.append(f"{hit} {'✓' if hit in gold else '✗'}")
+        print(f"{q['query'][:48]:<50} {','.join(sorted(gold)):<8} {cells[0]:<12} {cells[1]}")
+
+
 def build_collection(corpus: list[dict], embed_fn=embed):
     """Embed the labelled corpus into a throwaway in-memory collection.
 
@@ -167,6 +197,9 @@ def main() -> None:
     """CLI entry point: --demo, --compare, or (default) score the QA model."""
     if "--demo" in sys.argv:
         run_demo()
+        return
+    if "--debug" in sys.argv:
+        run_debug()
         return
     corpus, queries = load_corpus(), load_queries()
     if "--compare" in sys.argv:
