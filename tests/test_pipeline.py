@@ -143,13 +143,15 @@ def test_build_collection_twice_no_collision():
     evalmod.build_collection(corpus, embed_fn=fake_embed)  # must not raise
 
 
-def test_analytical_queries_template_parses():
-    # The committed template must be valid YAML with a `queries` key (the seed
-    # is empty until the user labels real abstracts).
+def test_analytical_queries_well_formed():
+    # Every analytical query must have text and at least one labelled arXiv id.
     import yaml
 
-    data = yaml.safe_load(evalmod.ANALYTICAL_QUERIES.read_text())
-    assert "queries" in data
+    queries = yaml.safe_load(evalmod.ANALYTICAL_QUERIES.read_text())["queries"]
+    assert len(queries) >= 10
+    for q in queries:
+        assert q["query"].strip()
+        assert q["relevant"] and all(r.strip() for r in q["relevant"])
 
 
 def test_analytical_eval_machinery():

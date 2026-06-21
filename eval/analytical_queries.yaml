@@ -1,32 +1,57 @@
 # Analytical questions over real arXiv abstracts — the rigorous model test.
 #
-# Goal: give multi-qa its best (and fair) chance to beat all-MiniLM, by testing
-# the one thing our other evals don't — genuine ASYMMETRIC retrieval over
-# production-length abstracts.
+# Each question targets a specific finding/method that lives in the MIDDLE or END
+# of its abstract (so it probes truncation: all-MiniLM cuts at ~256 tokens,
+# multi-qa reads ~512) and is paraphrased to avoid the abstract's own wording (so
+# it probes asymmetry). `relevant` is the answering paper's arXiv id.
 #
-# HOW TO WRITE A GOOD QUERY (this is the whole point):
-#   1. Run `python -m src.eval --freeze` first. It writes eval/abstracts.json,
-#      a snapshot of ~100 real abstracts (id, title, abstract, url). Open it.
-#   2. Pick an abstract and read it. Find a specific finding/method/result that
-#      lives in the MIDDLE or END of the abstract — NOT the title or first line.
-#      (Answers deep in the text are what test truncation: all-MiniLM cuts the
-#      tail at ~256 tokens; multi-qa reads ~512.)
-#   3. Ask about it in natural language that does NOT reuse the abstract's
-#      distinctive words. Paraphrase hard. (Shared vocabulary makes the task
-#      symmetric, which is exactly the case all-MiniLM already wins.)
-#   4. Label it with that abstract's arXiv `id` from abstracts.json.
-#
-# Good (asymmetric, deep): "Which technique did they use to remove foreground
-#   contamination?"  ->  an abstract whose 4th sentence mentions the method.
-# Weak (symmetric, shallow): "What is this paper about galaxy clusters?"  ->
-#   matches the title; tests nothing.
-#
-# Aim for ~15 queries. Then: `python -m src.eval --analytical`.
-# Tip: paste a batch of abstracts to Claude and ask it to draft questions that
-# target a deep detail and avoid the abstract's wording — then sanity-check them.
+# Workflow:
+#   python -m src.fetch_corpus      # if you haven't already (need the cache)
+#   python -m src.eval --freeze     # writes eval/abstracts.json; gold ids below
+#                                    # are always included + random distractors
+#   python -m src.eval --analytical # scores all-MiniLM vs multi-qa on these
+queries:
+  - query: "What process causes the atomic titanium signal to disappear in the cooler hot Jupiters?"
+    relevant: ["2606.14490"]
 
-queries: []
-  # - query: "How did they correct for the instrument's thermal noise?"
-  #   relevant: ["2506.12345"]   # <- a real id from eval/abstracts.json
-  # - query: "What did the simulation predict about outflow velocities?"
-  #   relevant: ["2506.67890"]
+  - query: "Using the galaxy rotation-mass relation as a cosmological probe, which feedback process could it not constrain?"
+    relevant: ["2606.13936"]
+
+  - query: "For the dynamically new comet observed before perihelion, was its mass loss dominated by frozen volatiles or by solid grains?"
+    relevant: ["2606.14371"]
+
+  - query: "For the peaked domain-wall gravitational-wave signals, in what temperature window is reconstruction most reliable?"
+    relevant: ["2606.15387"]
+
+  - query: "Setting aside selection effects, what genuine property distinguished the fast- and slow-moving groups of pulsars?"
+    relevant: ["2606.20201"]
+
+  - query: "Which component of the natural-language-to-database system reduced the number of failed query executions?"
+    relevant: ["2606.18108"]
+
+  - query: "Among the short-period planets surveyed for radio emission, which one had the tightest bound placed on its magnetic field?"
+    relevant: ["2606.19671"]
+
+  - query: "Even though its size sits at the planet/brown-dwarf boundary, what made the authors favour calling it a planet?"
+    relevant: ["2606.15430"]
+
+  - query: "In the relativistic jet simulations, which magnetic-field geometry produced bright, concentrated emission spots?"
+    relevant: ["2606.19153"]
+
+  - query: "How far out did the faint diffuse starlight between the cluster's galaxies extend?"
+    relevant: ["2606.17700"]
+
+  - query: "The smallest central galaxies found were about as massive as which Local Group dwarf?"
+    relevant: ["2606.16299"]
+
+  - query: "In the mechanism that makes CP domain walls decay, what is left over to act as dark matter?"
+    relevant: ["2606.18669"]
+
+  - query: "Which pairing of star and planet kept a near-certain chance of holding onto its atmosphere?"
+    relevant: ["2606.14508"]
+
+  - query: "Which observed evolved star was used as a stand-in for the Sun's future mass loss?"
+    relevant: ["2606.19575"]
+
+  - query: "This eclipsing system shares its unusual light-curve shape with which two previously known objects?"
+    relevant: ["2606.18971"]
