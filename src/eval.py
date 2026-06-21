@@ -12,6 +12,7 @@ is fully reproducible and runs independently of fetch/ingest.
 Run: `python -m src.eval`            # score the default model (all-MiniLM)
      `python -m src.eval --compare`  # all-MiniLM (default) vs multi-qa (QA)
      `python -m src.eval --debug`    # per-query top-1 for both models
+     `python -m src.eval --corpus`   # both models on the REAL abstracts (length probe)
 
 The corpus includes deliberate *hard negatives* (passages c31+) that echo a
 query's wording without answering it. They make the set discriminate: --compare
@@ -119,6 +120,21 @@ def run_debug() -> None:
         print(f"{q['query'][:48]:<50} {','.join(sorted(gold)):<8} {cells[0]:<12} {cells[1]}")
 
 
+def _fresh_collection():
+    """A clean, empty in-memory cosine collection named "eval".
+
+    The EphemeralClient is shared in-process, so a previous build leaves an
+    "eval" collection behind; we drop it first to guarantee a fresh index —
+    reusing it would mix two models' vectors and corrupt the second's score.
+    """
+    client = chromadb.EphemeralClient()
+    client.get_or_create_collection("eval")
+    client.delete_collection("eval")
+    return client.create_collection(
+        name="eval", metadata={"hnsw:space": config.DISTANCE_SPACE}
+    )
+
+
 def build_collection(corpus: list[dict], embed_fn=embed):
     """Embed the labelled corpus into a throwaway in-memory collection.
 
@@ -126,16 +142,7 @@ def build_collection(corpus: list[dict], embed_fn=embed):
     real astro_ph DB — each eval run starts from a clean, isolated index so the
     numbers are reproducible. Same cosine metric as production.
     """
-    client = chromadb.EphemeralClient()
-    # The in-memory client is shared in-process, so a previous build (e.g. the
-    # first model under --compare) leaves an "eval" collection behind. Drop it
-    # first to guarantee a *fresh* index — reusing it would mix the two models'
-    # vectors and corrupt the second model's score.
-    client.get_or_create_collection("eval")
-    client.delete_collection("eval")
-    coll = client.create_collection(
-        name="eval", metadata={"hnsw:space": config.DISTANCE_SPACE}
-    )
+    coll = _fresh_collection()
     coll.add(
         ids=[d["id"] for d in corpus],
         # Same title + text recipe as ingest.doc_text, so eval mirrors production.
@@ -145,15 +152,64 @@ def build_collection(corpus: list[dict], embed_fn=embed):
     return coll
 
 
+def run_corpus_eval(k: int = 5) -> None:
+    """Probe both models on the REAL fetched abstracts (production length).
+
+    The curated eval uses ~50-word passages, but production docs are ~200-word
+    abstracts — and all-MiniLM truncates at 256 tokens while multi-qa reads 512.
+    This tests both models at production length with *no manual labelling*, using
+    known-item retrieval: embed each abstract (abstract text only, so the query
+    is not a substring of the doc), query with that paper's TITLE, and check
+    whether its own abstract comes back. Gold = the abstract's own arXiv id.
+    """
+    import json
+
+    if not config.RAW_CORPUS.exists():
+        raise SystemExit("No corpus cache. Run `python -m src.fetch_corpus` first.")
+    records = json.loads(config.RAW_CORPUS.read_text())
+    lengths = sorted(len(r["abstract"].split()) for r in records)
+    avg = sum(lengths) // len(lengths)
+    print(f"Known-item retrieval over {len(records)} real abstracts "
+          f"(title -> abstract).")
+    print(f"Abstract length: avg {avg}, median {lengths[len(lengths)//2]}, "
+          f"max {lengths[-1]} words. all-MiniLM truncates ~256 tokens, "
+          f"multi-qa ~512.\n")
+    for label, model in [
+        ("all-MiniLM (default)", config.MODEL_NAME),
+        ("multi-qa-MiniLM (QA)", config.QA_MODEL_NAME),
+    ]:
+        embed_fn = lambda t, _m=model: embed(t, _m)
+        coll = _fresh_collection()
+        coll.add(
+            ids=[r["id"] for r in records],
+            embeddings=embed_fn([r["abstract"] for r in records]),  # abstract only
+        )
+        h1 = h5 = 0
+        rr = 0.0
+        for r in records:
+            ranked = coll.query(
+                query_embeddings=embed_fn([r["title"]]), n_results=k
+            )["ids"][0]
+            gold = {r["id"]}
+            h1 += hit_at_k(ranked, gold, 1)
+            h5 += hit_at_k(ranked, gold, k)
+            rr += reciprocal_rank(ranked, gold)
+        n = len(records)
+        print(_fmt(label, {"Hit@1": h1 / n, f"Hit@{k}": h5 / n, "MRR": rr / n}))
+
+
 def _fmt(name: str, m: dict) -> str:
     """Format one model's metrics as a single aligned line for the terminal."""
     return f"{name:<34} Hit@1={m['Hit@1']:.2f}  Hit@5={m['Hit@5']:.2f}  MRR={m['MRR']:.3f}"
 
 
 def main() -> None:
-    """CLI entry point: --compare, --debug, or (default) score the default model."""
+    """CLI entry point: --compare, --debug, --corpus, or (default) score it."""
     if "--debug" in sys.argv:
         run_debug()
+        return
+    if "--corpus" in sys.argv:
+        run_corpus_eval()
         return
     corpus, queries = load_corpus(), load_queries()
     if "--compare" in sys.argv:
