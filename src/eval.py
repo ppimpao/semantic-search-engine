@@ -211,22 +211,39 @@ def freeze_abstracts(n: int = 100, seed: int = 0) -> None:
     """Sample n real abstracts from the cache into a committed fixture.
 
     The fetched corpus is volatile (recent papers change daily), so we freeze a
-    deterministic sample to eval/abstracts.json. Commit that file: it makes the
-    --analytical eval reproducible and gives real arXiv ids to label against.
+    deterministic sample to eval/abstracts.json. Any abstract referenced by
+    analytical_queries.yaml is *always* included (those are the gold answers);
+    the rest of the n slots are filled with random distractors. Commit the file:
+    it makes --analytical reproducible.
     """
     if not config.RAW_CORPUS.exists():
         raise SystemExit("No corpus cache. Run `python -m src.fetch_corpus` first.")
     import random
 
     records = json.loads(config.RAW_CORPUS.read_text())
-    random.Random(seed).shuffle(records)  # seeded -> same sample every time
-    sample = [
-        {k: r[k] for k in ("id", "title", "abstract", "url")} for r in records[:n]
-    ]
+    by_id = {r["id"]: r for r in records}
+
+    # Gold ids the questions are labelled against — these must be present.
+    gold: list[str] = []
+    if ANALYTICAL_QUERIES.exists():
+        qs = yaml.safe_load(ANALYTICAL_QUERIES.read_text()).get("queries") or []
+        gold = list(dict.fromkeys(i for q in qs for i in q["relevant"]))
+    missing = [i for i in gold if i not in by_id]
+    if missing:
+        raise SystemExit(
+            f"Gold ids not in your corpus cache: {missing}. They may have rotated "
+            "out of a recent fetch — re-fetch, or remove those queries."
+        )
+
+    # Fill the remaining slots with random distractors (seeded for reproducibility).
+    others = [r for r in records if r["id"] not in set(gold)]
+    random.Random(seed).shuffle(others)
+    chosen = [by_id[i] for i in gold] + others[: max(0, n - len(gold))]
+    sample = [{k: r[k] for k in ("id", "title", "abstract", "url")} for r in chosen]
     ABSTRACTS_FILE.write_text(json.dumps(sample, indent=2))
-    print(f"Froze {len(sample)} abstracts -> {ABSTRACTS_FILE}")
-    print("Next: write questions in eval/analytical_queries.yaml, then run "
-          "`python -m src.eval --analytical`.")
+    print(f"Froze {len(sample)} abstracts ({len(gold)} gold + "
+          f"{len(sample) - len(gold)} distractors) -> {ABSTRACTS_FILE}")
+    print("Now run `python -m src.eval --analytical`.")
 
 
 def load_abstracts() -> list[dict]:
