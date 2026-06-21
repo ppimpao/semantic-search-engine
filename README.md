@@ -42,9 +42,11 @@ effectively **symmetric**. The QA model's trained habit of discounting surface
 form then *backfired*, pulling it to topically-adjacent-but-wrong passages (it
 answered a redshift question with "radio galaxies"). The QA heuristic is sound
 for *web-passage QA*; abstract retrieval isn't that. So I follow the evidence and
-default to `all-MiniLM`. `multi-qa` stays wired in (`eval --compare`) and is the
-expected default for **Phase 3's long-document RAG**, where retrieval is genuinely
-asymmetric. Full numbers and reasoning in *How I measured it*.
+default to `all-MiniLM` — a choice then re-tested at production length (200-word
+abstracts) and on the QA model's best-case task, where it still held. `multi-qa`
+stays wired in (`eval --compare`) and is the expected default for **Phase 3's
+full-document RAG**, where the asymmetry should finally pay off. The full
+three-test arc and numbers are in *How I measured it*.
 
 **3. Vector store: ChromaDB (a vector database, not a raw index).** Chosen over
 raw FAISS because it gives metadata storage + filtering, persistence, and a
@@ -72,57 +74,123 @@ optimisation (see *Future work* for the trigger conditions).
 
 ## How I measured it
 
-`eval/queries.yaml` is a hand-written set of 15 realistic space-domain
-questions, each labelled with the passage id(s) that answer it. The gold
-passages live in `eval/corpus.yaml`, and `python -m src.eval` reports **Hit@1**,
-**Hit@5**, and **MRR**.
+The model choice (decision #2) was settled by measurement, not by the textbook
+heuristic. The harness reports **Hit@1 / Hit@5 / MRR**, and I used it to test the
+QA-vs-similarity question in three regimes of increasing difficulty. The story
+below is the actual sequence — including the wrong turn it corrected.
 
-### Building an eval that actually discriminates
+### Test 1 — curated short passages (`eval --compare`)
 
-My first set was 30 passages, each on a *distinct* topic. It measured the wrong
-thing: telling "Mars water" apart from 29 unrelated topics is **topic
-separation**, not **relevance**, and both small models scored near-ceiling. A
-retrieval eval has to contain the case a model can get *wrong*, or it proves
-nothing.
+`eval/queries.yaml` is 15 hand-written space questions labelled to passages in
+`eval/corpus.yaml`. My *first* version was 30 distinct-topic passages, and it
+measured the wrong thing: telling "Mars water" apart from 29 unrelated topics is
+**topic separation**, not **relevance**, and both models scored near-ceiling. A
+retrieval eval has to contain the case a model can get *wrong*. So I added 10
+**hard negatives** (`c31`+) — passages that echo a query's wording while
+answering a *different* question (water ice on the *Moon* for a Mars-water query,
+*cosmic inflation* for a dark-energy query). The keyword bag-of-words floor
+dropped 0.47→0.40 Hit@1, confirming the set got harder in the intended way.
 
-So the set adds deliberate **hard negatives** (`c31`+): passages that echo a
-query's wording while answering a *different* question — water ice on the *Moon*
-for a Mars-water query, *cosmic inflation* for a dark-energy query, *gamma-ray*
-bursts for a *radio*-burst query. (Sanity check: the keyword bag-of-words floor
-drops from 0.47→0.40 Hit@1 once the traps are added — the set got harder in the
-intended way.)
-
-### What `--compare` found — and why I switched models
-
-`python -m src.eval --compare` scores both models over the harder 40-passage set:
-
-| Model | Hit@1 | Hit@5 | MRR |
+| Model (40 passages, hard negatives) | Hit@1 | Hit@5 | MRR |
 |---|---|---|---|
-| **`all-MiniLM-L6-v2`** (similarity, **default**) | **0.93** | **1.00** | **0.947** |
+| **`all-MiniLM-L6-v2`** (similarity) | **0.93** | **1.00** | **0.947** |
 | `multi-qa-MiniLM-L6-cos-v1` (relevance/QA) | 0.80 | 0.93 | 0.867 |
 | keyword bag-of-words (reference floor) | 0.40 | 0.60 | 0.48 |
 
-The similarity model won — the opposite of decision #2's original instinct. The
-entire gap was two queries `multi-qa` dropped that `all-MiniLM` got, and
-`python -m src.eval --debug` (per-query top-1 for both models) showed exactly
-what happened:
+The similarity model won — the opposite of my instinct. `eval --debug` (per-query
+top-1) showed *why*: the gold passage for *"what makes a star **wobble**…"*
+literally contains "wobble"; `all-MiniLM` matched it, while `multi-qa`,
+discounting surface form, wandered to a white-dwarf passage. **arXiv abstracts
+are short and topic-restating, so queries reuse their vocabulary — abstract
+search is effectively symmetric**, and the QA model's asymmetric specialism is
+wasted (it even hurts). I switched the default to `all-MiniLM` here.
 
-- *"What makes a star **wobble** so we can weigh an unseen planet?"* — the gold
-  passage literally contains "wobble." `all-MiniLM` matched it; `multi-qa`,
-  discounting surface form, wandered to a white-dwarf passage.
-- *"How far away is a galaxy from the **colour of its light**?"* — `all-MiniLM`
-  found the redshift passage; `multi-qa` was pulled to a *radio-galaxies* hard
-  negative ("galaxy + wavelengths"), a plausible-but-wrong leap.
+### Test 2 — real abstracts, known-item (`eval --corpus`)
 
-The lesson: **arXiv abstracts are short and topic-restating, so queries reuse
-their vocabulary — abstract search is effectively symmetric.** The QA model's
-asymmetric specialism is wasted here and even hurts. It remains the right tool
-for the asymmetric, long-document retrieval coming in Phase 3, which is why it
-stays available behind `--compare`.
+Test 1 used ~50-word passages, but production docs are ~200-word **abstracts**
+(avg 206, max 319 words). That length gap matters: `all-MiniLM` truncates at
+**256 tokens**, `multi-qa` at **512** — so on long abstracts the QA model
+literally reads more text. To probe production length with no manual labelling, I
+ran known-item retrieval (query with each paper's *title*, retrieve its abstract)
+over all 500 real abstracts:
 
-> Takeaway: the value wasn't confirming a guess — it was the eval *refuting* one.
-> The hypothesis was the QA model; the measurement said otherwise; the diagnostic
-> said why; the default changed. That loop is the point of building the harness.
+| Model (500 real abstracts, title → abstract) | Hit@1 | Hit@5 | MRR |
+|---|---|---|---|
+| `all-MiniLM-L6-v2` | 0.90 | 0.98 | 0.933 |
+| `multi-qa-MiniLM-L6-cos-v1` | 0.90 | 0.98 | 0.933 |
+
+A dead tie — *identical* to three decimals. When two different models score
+identically, the task isn't exercising their difference: title→abstract is
+near-symmetric and front-loaded (the title's match lives in the abstract's head,
+not the truncated tail), so it tests neither asymmetry nor truncation. Inconclusive
+by design — which is why I built Test 3.
+
+### Test 3 — real abstracts, deep analytical questions (`eval --analytical`)
+
+15 hand-written questions (`eval/analytical_queries.yaml`) over 100 real
+abstracts, each one engineered to be the hard case: it targets a detail in the
+**middle or end** of an abstract (probing truncation) and is **paraphrased** to
+share little surface form with it (probing asymmetry). E.g. *"Which observed
+evolved star was used as a stand-in for the Sun's future mass loss?"* → an
+abstract whose answer (**L2 Pup**) is in its final sentence.
+
+| Model (100 real abstracts, deep paraphrased Qs) | Hit@1 | Hit@5 | MRR |
+|---|---|---|---|
+| `all-MiniLM-L6-v2` | **0.80** | 0.87 | **0.833** |
+| `multi-qa-MiniLM-L6-cos-v1` | 0.73 | **0.93** | 0.822 |
+
+A near-tie — and a revealing one. The models split in opposite directions:
+`all-MiniLM` takes **Hit@1** (better at ranking its best guess #1), while
+`multi-qa` takes **Hit@5** (better at getting the answer *somewhere* in the
+top-5). That precision-vs-recall split is exactly the predicted shape of a QA
+model's advantage — and it's the *first time in the whole investigation* that
+`multi-qa` beat `all-MiniLM` at anything. Every gap is one query (n=15), so it's
+within noise — but it points the way theory says it should.
+
+### The arc, and the verdict
+
+Lined up by how *asymmetric* the task is, `multi-qa`'s relative standing climbs
+monotonically — yet never crosses over:
+
+| Task | asymmetry | all-MiniLM | multi-qa |
+|---|---|---|---|
+| Curated short passages | low | **0.93** Hit@1 | 0.80 |
+| Real abstracts, title → abstract | lowest | 0.90 | 0.90 (tie) |
+| Real abstracts, deep paraphrased Qs | **highest** | 0.80 Hit@1 / 0.833 MRR | 0.73 / 0.822 (**wins Hit@5**) |
+
+**Verdict: `all-MiniLM` is the default, now confirmed across three regimes, not
+assumed.** The QA model's advantage is real in *direction* (it improves with
+asymmetry, and takes Hit@5 on the hardest set) but too small in *magnitude* to
+matter at this corpus and scale. It stays wired in (`eval --compare`) as the
+expected default for **Phase 3's full-document RAG**, where the asymmetry — and
+the 512-token window — should finally pay off.
+
+> The point was never to confirm a guess. The hypothesis (QA model) was *refuted*
+> on short text, the diagnostic explained *why*, and re-testing at production
+> length and on the QA model's best-case task pinned down exactly *where* the
+> advantage lives and how big it is. The default is evidence, not a default.
+
+### Corrections and things I didn't anticipate
+
+This project changed shape as the evidence came in. The honest list:
+
+- **arXiv category bug.** The first fetch used `cat:astro-ph`, which only matches
+  the *legacy* pre-2009 category and misses modern papers. Fixed by OR-ing the six
+  `astro-ph.*` subcategories (see `fetch_corpus.search_query`).
+- **Token truncation.** I didn't initially consider that `all-MiniLM` caps at 256
+  tokens while `multi-qa` reads 512 — directly relevant once the real docs turned
+  out to average ~270 tokens. It became a central reason to test at production
+  length (Test 2/3).
+- **Eval representativeness.** My first eval used passages far shorter than the
+  abstracts actually served, so its conclusion didn't automatically transfer; the
+  abstract-length tests exist to close that gap.
+- **A flawed test, removed.** An earlier "answer vs. reworded-question" demo
+  scored 0/6 for *both* models — it measured near-duplicate-text dominance, not
+  relevance, and couldn't separate the models. It was deleted rather than left in
+  as misleading evidence.
+- **Model swap ⇒ re-ingest.** Because ingest and query must share a model, changing
+  the default means rebuilding `data/chroma/` with `python -m src.ingest`. The
+  same-model invariant (decision #5) is what makes this a one-line, foolproof change.
 
 ## How it works
 
@@ -203,8 +271,11 @@ python -m src.fetch_corpus            # pull + cache arXiv astro-ph abstracts ->
 python -m src.ingest                  # embed + upsert into persisted ChromaDB (cosine)
 python -m src.search "how do galaxies form?"   # top-k by meaning
 python -m src.eval                    # Hit@1 / Hit@5 / MRR on the labelled set
-python -m src.eval --compare          # all-MiniLM (default) vs multi-qa
+python -m src.eval --compare          # all-MiniLM (default) vs multi-qa (Test 1)
 python -m src.eval --debug            # per-query top-1 for both models
+python -m src.eval --corpus           # both models on real abstracts, title->abstract (Test 2)
+python -m src.eval --freeze           # snapshot real abstracts -> eval/abstracts.json
+python -m src.eval --analytical       # both models on deep questions over real abstracts (Test 3)
 
 pytest                                # offline smoke + metrics tests (no model download)
 ```
@@ -223,9 +294,11 @@ src/fetch_corpus.py  pull + cache arXiv astro-ph abstracts
 src/store.py         open/create the persisted cosine collection
 src/ingest.py        embed docs, upsert into Chroma
 src/search.py        embed query, query Chroma, pretty-print top-k
-src/eval.py          labelled queries -> Hit@k, MRR (+ --compare, --debug)
-eval/corpus.yaml     40 passages: 30 gold answers + 10 hard-negative traps
-eval/queries.yaml    15 queries, each tagged with the answering passage id(s)
+src/eval.py          Hit@k / MRR (+ --compare, --debug, --corpus, --freeze, --analytical)
+eval/corpus.yaml     40 passages: 30 gold answers + 10 hard-negative traps (Test 1)
+eval/queries.yaml    15 queries, each tagged with the answering passage id(s) (Test 1)
+eval/analytical_queries.yaml  15 deep, paraphrased questions over real abstracts (Test 3)
+eval/abstracts.json  frozen real-abstract corpus for Test 3 (created by --freeze)
 tests/test_pipeline.py  offline smoke test + metrics, via an injected fake embedder
 ```
 
