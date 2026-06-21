@@ -126,6 +126,28 @@ def test_evaluate_runs_over_eval_corpus():
     assert 0.0 <= metrics["MRR"] <= 1.0
 
 
+def test_demo_cases_well_formed():
+    demos = evalmod.load_demo()
+    assert demos, "demo set is empty"
+    for d in demos:
+        assert d["query"] and d["restatement"] and d["answer"]
+
+
+def test_cos_of_unit_vectors():
+    # Two identical normalized vectors -> cosine 1; orthogonal -> 0.
+    assert evalmod._cos([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+    assert evalmod._cos([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+
+
+def test_hard_negatives_are_unlabelled():
+    # Hard negatives (c31+) must NOT be any query's gold answer — they are traps.
+    labelled = {r for q in evalmod.load_queries() for r in q["relevant"]}
+    corpus_ids = {d["id"] for d in evalmod.load_corpus()}
+    hard_negatives = {i for i in corpus_ids if int(i[1:]) >= 31}
+    assert hard_negatives, "expected hard-negative passages c31+"
+    assert hard_negatives.isdisjoint(labelled)
+
+
 def test_build_collection_twice_no_collision():
     # The --compare path builds the collection once per model; the shared
     # in-memory client must not raise "Collection [eval] already exists".

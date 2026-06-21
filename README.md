@@ -70,23 +70,48 @@ optimisation (see *Future work* for the trigger conditions).
 
 `eval/queries.yaml` is a hand-written set of 15 realistic space-domain
 questions, each labelled with the passage id(s) that answer it. The gold
-passages live in `eval/corpus.yaml` (30 distinct space-domain passages), so each
-query's answer must be ranked above 29 distractors — a genuine retrieval task,
-not a lookup. `python -m src.eval` reports **Hit@1**, **Hit@5**, and **MRR**.
+passages live in `eval/corpus.yaml`, and `python -m src.eval` reports **Hit@1**,
+**Hit@5**, and **MRR**.
 
-`python -m src.eval --compare` runs the same query set through the QA model and
-the pure-similarity model — this is the evidence for decision #2.
+### Designing an eval that actually discriminates
+
+My first version of this set was 30 passages, each on a *distinct* topic. It
+turned out to measure the wrong thing: telling "Mars water" apart from 29
+unrelated topics is **topic separation**, not **relevance**, and on that easy
+set both small models scored near-ceiling — the pure-similarity model even edged
+ahead (a one-query difference at n=15, i.e. noise). A retrieval eval has to
+contain the case the model can get *wrong*, or it proves nothing.
+
+So the set now includes deliberate **hard negatives** (`c31`+): passages that
+echo a query's wording while answering a *different* question — water ice on the
+*Moon* for a Mars-water query, *cosmic inflation* for a dark-energy query,
+*gamma-ray* bursts for a *radio*-burst query. These are the lexical traps a
+similarity-only model falls for. (Sanity check: the keyword bag-of-words floor
+drops from 0.47→0.40 Hit@1 once the traps are added — the set got harder in the
+intended way.)
+
+`python -m src.eval --compare` scores both models over this harder set:
 
 | Model | Hit@1 | Hit@5 | MRR |
 |---|---|---|---|
 | `multi-qa-MiniLM-L6-cos-v1` (relevance/QA) | _run `--compare`_ | _run `--compare`_ | _run `--compare`_ |
 | `all-MiniLM-L6-v2` (similarity) | _run `--compare`_ | _run `--compare`_ | _run `--compare`_ |
-| keyword bag-of-words (reference baseline) | 0.47 | 0.73 | 0.55 |
+| keyword bag-of-words (reference floor) | 0.40 | 0.60 | 0.48 |
 
-The keyword baseline row is produced by the offline test embedder and is shown
-as a floor: a model that understands the *question→answer* mapping should beat
-it clearly. Run `python -m src.eval --compare` to populate the model rows (it
-downloads the two MiniLM models on first run).
+### The cleanest isolation: answer vs. reworded question
+
+`python -m src.eval --demo` is the sharpest version of decision #2. Each case
+gives a model a question plus two candidates — the **answer**, and the **same
+question reworded** — and asks which it ranks higher. A similarity model is
+pulled toward the look-alike question; a relevance/QA model prefers the answer:
+
+| Model | Answer ranked above the reworded question |
+|---|---|
+| `multi-qa-MiniLM-L6-cos-v1` (relevance/QA) | _run `--demo`_ |
+| `all-MiniLM-L6-v2` (similarity) | _run `--demo`_ |
+
+Run `--compare` and `--demo` (they download the two MiniLM models on first use)
+to populate the cells above.
 
 ## How it works
 
@@ -168,6 +193,7 @@ python -m src.ingest                  # embed + upsert into persisted ChromaDB (
 python -m src.search "how do galaxies form?"   # top-k by meaning
 python -m src.eval                    # Hit@1 / Hit@5 / MRR on the labelled set
 python -m src.eval --compare          # QA vs similarity model, same queries
+python -m src.eval --demo             # answer vs. reworded-question isolation
 
 pytest                                # offline smoke + metrics tests (no model download)
 ```
@@ -186,9 +212,10 @@ src/fetch_corpus.py  pull + cache arXiv astro-ph abstracts
 src/store.py         open/create the persisted cosine collection
 src/ingest.py        embed docs, upsert into Chroma
 src/search.py        embed query, query Chroma, pretty-print top-k
-src/eval.py          labelled queries -> Hit@k, MRR (+ --compare)
-eval/corpus.yaml     30 labelled space-domain passages
+src/eval.py          labelled queries -> Hit@k, MRR (+ --compare, --demo)
+eval/corpus.yaml     40 passages: 30 gold answers + 10 hard-negative traps
 eval/queries.yaml    15 queries, each tagged with the answering passage id(s)
+eval/demo.yaml       answer vs. reworded-question cases for --demo
 tests/test_pipeline.py  offline smoke test + metrics, via an injected fake embedder
 ```
 
