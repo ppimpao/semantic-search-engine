@@ -9,22 +9,18 @@ is fully reproducible and runs independently of fetch/ingest.
 
     eval/corpus.yaml + eval/queries.yaml  ->  eval  --(embed + score)-->  metrics
 
-Run: `python -m src.eval`            # evaluate the QA model
-     `python -m src.eval --compare`  # QA model vs pure-similarity model
-     `python -m src.eval --demo`     # answer vs. reworded-question (clean isolation)
+Run: `python -m src.eval`            # score the default model (all-MiniLM)
+     `python -m src.eval --compare`  # all-MiniLM (default) vs multi-qa (QA)
+     `python -m src.eval --debug`    # per-query top-1 for both models
 
 The corpus includes deliberate *hard negatives* (passages c31+) that echo a
-query's wording without answering it, so the set rewards genuine relevance, not
-just topical overlap. --compare scores both models over that set.
-
---demo is the cleanest architecture evidence: for each case it checks whether a
-model ranks the true ANSWER above a reworded version of the QUESTION. A
-similarity model is pulled toward the look-alike question; a relevance/QA model
-should prefer the answer.
+query's wording without answering it. They make the set discriminate: --compare
+showed the general similarity model (all-MiniLM) beats the QA model on this
+short-abstract corpus, and --debug shows why (see README "How I measured it").
 
 Depends on
 ----------
-- `config`         : MODEL_NAME, SIMILARITY_MODEL_NAME, DISTANCE_SPACE, ROOT
+- `config`         : MODEL_NAME, QA_MODEL_NAME, DISTANCE_SPACE, ROOT
 - `embedder.embed` : to vectorize corpus + queries (the model under test)
 - chromadb / yaml  : ephemeral collection + reading the labelled files
 - eval/corpus.yaml, eval/queries.yaml : the gold data
@@ -93,45 +89,6 @@ def load_queries() -> list[dict]:
     return yaml.safe_load((EVAL_DIR / "queries.yaml").read_text())["queries"]
 
 
-def load_demo() -> list[dict]:
-    """Read the similarity-vs-relevance demo cases from eval/demo.yaml.
-
-    Each case is {query, restatement, answer}; see run_demo for what they test.
-    """
-    return yaml.safe_load((EVAL_DIR / "demo.yaml").read_text())["demos"]
-
-
-def _cos(a: list[float], b: list[float]) -> float:
-    """Cosine similarity of two vectors. embed() returns unit vectors, so the
-    dot product *is* the cosine — no need to divide by norms."""
-    return sum(x * y for x, y in zip(a, b))
-
-
-def run_demo() -> None:
-    """Print the core architecture evidence: answer vs. reworded-question.
-
-    For every demo case and each model, we embed the query, the reworded
-    question (restatement), and the true answer, then check which candidate the
-    query is closer to. A similarity model leans toward the restatement (it
-    looks like the query); a relevance/QA model should prefer the answer. We
-    report how often each model ranks the answer above the restatement.
-    """
-    demos = load_demo()
-    print(f"Similarity-vs-relevance demo — {len(demos)} cases.")
-    print("Does the model rank the ANSWER above a reworded QUESTION?\n")
-    for label, model in [
-        ("multi-qa-MiniLM (relevance/QA)", config.MODEL_NAME),
-        ("all-MiniLM (similarity)", config.SIMILARITY_MODEL_NAME),
-    ]:
-        answer_wins = 0
-        for d in demos:
-            # One batched call: [query, restatement, answer] -> three vectors.
-            qv, rv, av = embed([d["query"], d["restatement"], d["answer"]], model)
-            if _cos(qv, av) > _cos(qv, rv):  # answer closer than the restatement?
-                answer_wins += 1
-        print(f"{label:<34} answer ranked first in {answer_wins}/{len(demos)} cases")
-
-
 def run_debug() -> None:
     """Per-query diagnostic: show each model's top-1 hit, side by side.
 
@@ -140,7 +97,7 @@ def run_debug() -> None:
     specific hard negatives a model falls for are visible.
     """
     corpus, queries = load_corpus(), load_queries()
-    models = [("multi-qa", config.MODEL_NAME), ("all-MiniLM", config.SIMILARITY_MODEL_NAME)]
+    models = [("all-MiniLM", config.MODEL_NAME), ("multi-qa", config.QA_MODEL_NAME)]
     # Process one model at a time: build_collection reuses the name "eval", so we
     # can't hold two collections at once. Collect each model's top-1 per query.
     tops: dict[str, list[str]] = {}
@@ -152,7 +109,7 @@ def run_debug() -> None:
             for q in queries
         ]
     # Print a row per query: gold, then each model's top-1 with a hit marker.
-    print(f"{'query':<50} {'gold':<8} {'multi-qa':<12} all-MiniLM")
+    print(f"{'query':<50} {'gold':<8} {'all-MiniLM':<12} multi-qa")
     for i, q in enumerate(queries):
         gold = set(q["relevant"])
         cells = []
@@ -194,10 +151,7 @@ def _fmt(name: str, m: dict) -> str:
 
 
 def main() -> None:
-    """CLI entry point: --demo, --compare, or (default) score the QA model."""
-    if "--demo" in sys.argv:
-        run_demo()
-        return
+    """CLI entry point: --compare, --debug, or (default) score the default model."""
     if "--debug" in sys.argv:
         run_debug()
         return
@@ -206,8 +160,8 @@ def main() -> None:
         print(f"{len(queries)} queries over {len(corpus)} labelled passages:\n")
         # Score each model on its OWN embeddings of the same corpus + queries.
         for label, model in [
-            ("multi-qa-MiniLM (relevance/QA)", config.MODEL_NAME),
-            ("all-MiniLM (similarity)", config.SIMILARITY_MODEL_NAME),
+            ("all-MiniLM (similarity, default)", config.MODEL_NAME),
+            ("multi-qa-MiniLM (relevance/QA)", config.QA_MODEL_NAME),
         ]:
             # Bind `model` now (default arg) so the lambda doesn't capture the
             # loop variable by reference and end up using the last model twice.
@@ -215,7 +169,7 @@ def main() -> None:
             m = evaluate(queries, build_collection(corpus, embed_fn), embed_fn=embed_fn)
             print(_fmt(label, m))
     else:
-        # Default: just the production QA model.
+        # Default: just the production model.
         m = evaluate(queries, build_collection(corpus))
         print(_fmt(config.MODEL_NAME, m))
 

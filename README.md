@@ -23,24 +23,28 @@ so query time is one forward pass plus an approximate-nearest-neighbour lookup.
 No cross-encoder reranker in v1 — it's O(N) per query and unnecessary at this
 scale (see *Future work*).
 
-**2. Model: `multi-qa-MiniLM-L6-cos-v1` — a relevance/QA model, not a
-similarity model.** This is the decision worth explaining. Sentence-embedding
-models target two different goals:
+**2. Model: `all-MiniLM-L6-v2` — chosen by measurement, against my first
+instinct.** This is the decision worth explaining, because the eval overturned
+my hypothesis. Sentence-embedding models split into two families:
 
-- **Similarity (symmetric):** *"find text that looks like the query."* A generic
-  model like `all-MiniLM-L6-v2` optimises for this and will rank a near-verbatim
-  restatement of the query #1.
-- **Relevance / QA (asymmetric):** *"find the passage that answers the query."* A
-  question and its answer rarely share surface form, so a similarity model
-  systematically under-ranks the true answer.
+- **Similarity (symmetric):** *"find text that looks like the query."*
+  `all-MiniLM-L6-v2` is a strong general model of this kind.
+- **Relevance / QA (asymmetric):** *"find the passage that answers the query."*
+  `multi-qa-MiniLM-L6-cos-v1` is trained on ~215M question/answer pairs (MS MARCO
+  and friends) for query→document retrieval.
 
-Search is a relevance task, so we use `multi-qa-MiniLM-L6-cos-v1`, trained on
-~215M question/answer pairs (MS MARCO and friends) specifically for
-query→document retrieval. It's the same small, fast, free MiniLM size class as
-`all-MiniLM`, so there's no real cost to the better-aligned choice. Outputs are
-L2-normalized → cosine is the natural metric. The eval harness ships a
-`--compare` mode that scores both models on the same labelled queries so the
-choice is backed by numbers, not assertion (see *How I measured it*).
+The textbook heuristic says *"search is a relevance task, so use the QA model,"*
+and that's what I picked first. **My own eval disagreed.** On a labelled set with
+hard negatives, `all-MiniLM` beat `multi-qa` (Hit@1 **0.93 vs 0.80**), and the
+per-query diagnostic showed *why*: arXiv abstracts are short, dense, and
+topic-restating, so queries reuse the answer's vocabulary — the task is
+effectively **symmetric**. The QA model's trained habit of discounting surface
+form then *backfired*, pulling it to topically-adjacent-but-wrong passages (it
+answered a redshift question with "radio galaxies"). The QA heuristic is sound
+for *web-passage QA*; abstract retrieval isn't that. So I follow the evidence and
+default to `all-MiniLM`. `multi-qa` stays wired in (`eval --compare`) and is the
+expected default for **Phase 3's long-document RAG**, where retrieval is genuinely
+asymmetric. Full numbers and reasoning in *How I measured it*.
 
 **3. Vector store: ChromaDB (a vector database, not a raw index).** Chosen over
 raw FAISS because it gives metadata storage + filtering, persistence, and a
@@ -73,45 +77,52 @@ questions, each labelled with the passage id(s) that answer it. The gold
 passages live in `eval/corpus.yaml`, and `python -m src.eval` reports **Hit@1**,
 **Hit@5**, and **MRR**.
 
-### Designing an eval that actually discriminates
+### Building an eval that actually discriminates
 
-My first version of this set was 30 passages, each on a *distinct* topic. It
-turned out to measure the wrong thing: telling "Mars water" apart from 29
-unrelated topics is **topic separation**, not **relevance**, and on that easy
-set both small models scored near-ceiling — the pure-similarity model even edged
-ahead (a one-query difference at n=15, i.e. noise). A retrieval eval has to
-contain the case the model can get *wrong*, or it proves nothing.
+My first set was 30 passages, each on a *distinct* topic. It measured the wrong
+thing: telling "Mars water" apart from 29 unrelated topics is **topic
+separation**, not **relevance**, and both small models scored near-ceiling. A
+retrieval eval has to contain the case a model can get *wrong*, or it proves
+nothing.
 
-So the set now includes deliberate **hard negatives** (`c31`+): passages that
-echo a query's wording while answering a *different* question — water ice on the
-*Moon* for a Mars-water query, *cosmic inflation* for a dark-energy query,
-*gamma-ray* bursts for a *radio*-burst query. These are the lexical traps a
-similarity-only model falls for. (Sanity check: the keyword bag-of-words floor
+So the set adds deliberate **hard negatives** (`c31`+): passages that echo a
+query's wording while answering a *different* question — water ice on the *Moon*
+for a Mars-water query, *cosmic inflation* for a dark-energy query, *gamma-ray*
+bursts for a *radio*-burst query. (Sanity check: the keyword bag-of-words floor
 drops from 0.47→0.40 Hit@1 once the traps are added — the set got harder in the
 intended way.)
 
-`python -m src.eval --compare` scores both models over this harder set:
+### What `--compare` found — and why I switched models
+
+`python -m src.eval --compare` scores both models over the harder 40-passage set:
 
 | Model | Hit@1 | Hit@5 | MRR |
 |---|---|---|---|
-| `multi-qa-MiniLM-L6-cos-v1` (relevance/QA) | _run `--compare`_ | _run `--compare`_ | _run `--compare`_ |
-| `all-MiniLM-L6-v2` (similarity) | _run `--compare`_ | _run `--compare`_ | _run `--compare`_ |
+| **`all-MiniLM-L6-v2`** (similarity, **default**) | **0.93** | **1.00** | **0.947** |
+| `multi-qa-MiniLM-L6-cos-v1` (relevance/QA) | 0.80 | 0.93 | 0.867 |
 | keyword bag-of-words (reference floor) | 0.40 | 0.60 | 0.48 |
 
-### The cleanest isolation: answer vs. reworded question
+The similarity model won — the opposite of decision #2's original instinct. The
+entire gap was two queries `multi-qa` dropped that `all-MiniLM` got, and
+`python -m src.eval --debug` (per-query top-1 for both models) showed exactly
+what happened:
 
-`python -m src.eval --demo` is the sharpest version of decision #2. Each case
-gives a model a question plus two candidates — the **answer**, and the **same
-question reworded** — and asks which it ranks higher. A similarity model is
-pulled toward the look-alike question; a relevance/QA model prefers the answer:
+- *"What makes a star **wobble** so we can weigh an unseen planet?"* — the gold
+  passage literally contains "wobble." `all-MiniLM` matched it; `multi-qa`,
+  discounting surface form, wandered to a white-dwarf passage.
+- *"How far away is a galaxy from the **colour of its light**?"* — `all-MiniLM`
+  found the redshift passage; `multi-qa` was pulled to a *radio-galaxies* hard
+  negative ("galaxy + wavelengths"), a plausible-but-wrong leap.
 
-| Model | Answer ranked above the reworded question |
-|---|---|
-| `multi-qa-MiniLM-L6-cos-v1` (relevance/QA) | _run `--demo`_ |
-| `all-MiniLM-L6-v2` (similarity) | _run `--demo`_ |
+The lesson: **arXiv abstracts are short and topic-restating, so queries reuse
+their vocabulary — abstract search is effectively symmetric.** The QA model's
+asymmetric specialism is wasted here and even hurts. It remains the right tool
+for the asymmetric, long-document retrieval coming in Phase 3, which is why it
+stays available behind `--compare`.
 
-Run `--compare` and `--demo` (they download the two MiniLM models on first use)
-to populate the cells above.
+> Takeaway: the value wasn't confirming a guess — it was the eval *refuting* one.
+> The hypothesis was the QA model; the measurement said otherwise; the diagnostic
+> said why; the default changed. That loop is the point of building the harness.
 
 ## How it works
 
@@ -192,8 +203,8 @@ python -m src.fetch_corpus            # pull + cache arXiv astro-ph abstracts ->
 python -m src.ingest                  # embed + upsert into persisted ChromaDB (cosine)
 python -m src.search "how do galaxies form?"   # top-k by meaning
 python -m src.eval                    # Hit@1 / Hit@5 / MRR on the labelled set
-python -m src.eval --compare          # QA vs similarity model, same queries
-python -m src.eval --demo             # answer vs. reworded-question isolation
+python -m src.eval --compare          # all-MiniLM (default) vs multi-qa
+python -m src.eval --debug            # per-query top-1 for both models
 
 pytest                                # offline smoke + metrics tests (no model download)
 ```
@@ -212,10 +223,9 @@ src/fetch_corpus.py  pull + cache arXiv astro-ph abstracts
 src/store.py         open/create the persisted cosine collection
 src/ingest.py        embed docs, upsert into Chroma
 src/search.py        embed query, query Chroma, pretty-print top-k
-src/eval.py          labelled queries -> Hit@k, MRR (+ --compare, --demo)
+src/eval.py          labelled queries -> Hit@k, MRR (+ --compare, --debug)
 eval/corpus.yaml     40 passages: 30 gold answers + 10 hard-negative traps
 eval/queries.yaml    15 queries, each tagged with the answering passage id(s)
-eval/demo.yaml       answer vs. reworded-question cases for --demo
 tests/test_pipeline.py  offline smoke test + metrics, via an injected fake embedder
 ```
 

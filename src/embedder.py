@@ -48,10 +48,10 @@ def embed(texts: list[str], model_name: str = config.MODEL_NAME) -> list[list[fl
     documents, `search` calls it on the query; same code, same model, so the
     vectors live in the same space and cosine comparison is meaningful.
 
-    The model is a *-cos-v1 variant, so we ask for L2-normalized output and let
-    cosine similarity be the metric. Note the bi-encoder is *mechanically*
-    symmetric (documents and queries go through the identical forward pass); it
-    is the model's *training* on Q/A pairs that makes it asymmetric-aware.
+    We ask for L2-normalized output and let cosine similarity be the metric.
+    Documents and queries go through the identical forward pass (the bi-encoder
+    is mechanically symmetric); for abstract search that symmetry is a feature,
+    which is why the general all-MiniLM model wins here (see config.MODEL_NAME).
     """
     model = _load(model_name)
     # normalize_embeddings=True -> unit-length vectors (cosine-ready);
