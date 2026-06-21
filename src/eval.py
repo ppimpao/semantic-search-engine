@@ -13,6 +13,8 @@ Run: `python -m src.eval`            # score the default model (all-MiniLM)
      `python -m src.eval --compare`  # all-MiniLM (default) vs multi-qa (QA)
      `python -m src.eval --debug`    # per-query top-1 for both models
      `python -m src.eval --corpus`   # both models on the REAL abstracts (length probe)
+     `python -m src.eval --freeze`   # snapshot N real abstracts -> eval/abstracts.json
+     `python -m src.eval --analytical` # both models on NL questions over real abstracts
 
 The corpus includes deliberate *hard negatives* (passages c31+) that echo a
 query's wording without answering it. They make the set discriminate: --compare
@@ -32,6 +34,7 @@ Provides for
   consumes this; it is measurement, not part of the serving path).
 """
 
+import json
 import sys
 
 import chromadb
@@ -161,9 +164,11 @@ def run_corpus_eval(k: int = 5) -> None:
     known-item retrieval: embed each abstract (abstract text only, so the query
     is not a substring of the doc), query with that paper's TITLE, and check
     whether its own abstract comes back. Gold = the abstract's own arXiv id.
-    """
-    import json
 
+    Caveat: title->abstract is near-symmetric and front-loaded (the title's match
+    lives in the abstract's head, not its truncated tail), so it does NOT
+    exercise asymmetry or truncation. For that, use --analytical.
+    """
     if not config.RAW_CORPUS.exists():
         raise SystemExit("No corpus cache. Run `python -m src.fetch_corpus` first.")
     records = json.loads(config.RAW_CORPUS.read_text())
@@ -198,6 +203,78 @@ def run_corpus_eval(k: int = 5) -> None:
         print(_fmt(label, {"Hit@1": h1 / n, f"Hit@{k}": h5 / n, "MRR": rr / n}))
 
 
+ABSTRACTS_FILE = EVAL_DIR / "abstracts.json"
+ANALYTICAL_QUERIES = EVAL_DIR / "analytical_queries.yaml"
+
+
+def freeze_abstracts(n: int = 100, seed: int = 0) -> None:
+    """Sample n real abstracts from the cache into a committed fixture.
+
+    The fetched corpus is volatile (recent papers change daily), so we freeze a
+    deterministic sample to eval/abstracts.json. Commit that file: it makes the
+    --analytical eval reproducible and gives real arXiv ids to label against.
+    """
+    if not config.RAW_CORPUS.exists():
+        raise SystemExit("No corpus cache. Run `python -m src.fetch_corpus` first.")
+    import random
+
+    records = json.loads(config.RAW_CORPUS.read_text())
+    random.Random(seed).shuffle(records)  # seeded -> same sample every time
+    sample = [
+        {k: r[k] for k in ("id", "title", "abstract", "url")} for r in records[:n]
+    ]
+    ABSTRACTS_FILE.write_text(json.dumps(sample, indent=2))
+    print(f"Froze {len(sample)} abstracts -> {ABSTRACTS_FILE}")
+    print("Next: write questions in eval/analytical_queries.yaml, then run "
+          "`python -m src.eval --analytical`.")
+
+
+def load_abstracts() -> list[dict]:
+    """Read the frozen real-abstract fixture (created by --freeze)."""
+    return json.loads(ABSTRACTS_FILE.read_text())
+
+
+def build_abstract_collection(abstracts: list[dict], embed_fn=embed):
+    """Index the frozen abstracts exactly as production does (title + abstract)."""
+    coll = _fresh_collection()
+    coll.add(
+        ids=[a["id"] for a in abstracts],
+        embeddings=embed_fn([f"{a['title']}. {a['abstract']}" for a in abstracts]),
+    )
+    return coll
+
+
+def run_analytical() -> None:
+    """The rigorous test: NL analytical questions over real abstracts.
+
+    This is what title->abstract (--corpus) couldn't do — it scores both models
+    on hand-written questions whose answers sit *deep* in real abstracts, phrased
+    differently from the text. If multi-qa's asymmetric/long-passage advantage is
+    real at this scale, this is where it shows; if not, we've earned the right to
+    say so.
+    """
+    abstracts = load_abstracts()
+    queries = yaml.safe_load(ANALYTICAL_QUERIES.read_text())["queries"] or []
+    if not queries:
+        raise SystemExit(
+            "No analytical queries yet. Add some to eval/analytical_queries.yaml "
+            "(see the instructions in that file)."
+        )
+    ids = {a["id"] for a in abstracts}
+    for q in queries:  # fail loudly if a label points at a missing abstract
+        unknown = set(q["relevant"]) - ids
+        if unknown:
+            raise SystemExit(f"Query labels unknown ids {unknown}: {q['query']!r}")
+    print(f"{len(queries)} analytical queries over {len(abstracts)} real abstracts:\n")
+    for label, model in [
+        ("all-MiniLM (default)", config.MODEL_NAME),
+        ("multi-qa-MiniLM (QA)", config.QA_MODEL_NAME),
+    ]:
+        embed_fn = lambda t, _m=model: embed(t, _m)
+        coll = build_abstract_collection(abstracts, embed_fn)
+        print(_fmt(label, evaluate(queries, coll, embed_fn=embed_fn)))
+
+
 def _fmt(name: str, m: dict) -> str:
     """Format one model's metrics as a single aligned line for the terminal."""
     return f"{name:<34} Hit@1={m['Hit@1']:.2f}  Hit@5={m['Hit@5']:.2f}  MRR={m['MRR']:.3f}"
@@ -210,6 +287,15 @@ def main() -> None:
         return
     if "--corpus" in sys.argv:
         run_corpus_eval()
+        return
+    if "--freeze" in sys.argv:
+        # Optional integer after --freeze sets the sample size.
+        i = sys.argv.index("--freeze")
+        n = int(sys.argv[i + 1]) if i + 1 < len(sys.argv) and sys.argv[i + 1].isdigit() else 100
+        freeze_abstracts(n)
+        return
+    if "--analytical" in sys.argv:
+        run_analytical()
         return
     corpus, queries = load_corpus(), load_queries()
     if "--compare" in sys.argv:
