@@ -141,3 +141,28 @@ def test_build_collection_twice_no_collision():
     corpus = evalmod.load_corpus()
     evalmod.build_collection(corpus, embed_fn=fake_embed)
     evalmod.build_collection(corpus, embed_fn=fake_embed)  # must not raise
+
+
+def test_analytical_queries_template_parses():
+    # The committed template must be valid YAML with a `queries` key (the seed
+    # is empty until the user labels real abstracts).
+    import yaml
+
+    data = yaml.safe_load(evalmod.ANALYTICAL_QUERIES.read_text())
+    assert "queries" in data
+
+
+def test_analytical_eval_machinery():
+    # Exercise the abstract collection + scoring path with synthetic data, so the
+    # --analytical wiring is covered without a frozen corpus or the real model.
+    abstracts = [
+        {"id": "2506.001", "title": "Foreground removal in CMB maps",
+         "abstract": "We subtract galactic dust using a component-separation method."},
+        {"id": "2506.002", "title": "Exoplanet transit timing",
+         "abstract": "Variations in transit timing reveal an unseen perturbing planet."},
+    ]
+    coll = evalmod.build_abstract_collection(abstracts, embed_fn=fake_embed)
+    queries = [{"query": "how did they separate the dust component",
+                "relevant": ["2506.001"]}]
+    m = evalmod.evaluate(queries, coll, embed_fn=fake_embed)
+    assert m["Hit@1"] == 1.0

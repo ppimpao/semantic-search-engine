@@ -1,0 +1,32 @@
+# Analytical questions over real arXiv abstracts — the rigorous model test.
+#
+# Goal: give multi-qa its best (and fair) chance to beat all-MiniLM, by testing
+# the one thing our other evals don't — genuine ASYMMETRIC retrieval over
+# production-length abstracts.
+#
+# HOW TO WRITE A GOOD QUERY (this is the whole point):
+#   1. Run `python -m src.eval --freeze` first. It writes eval/abstracts.json,
+#      a snapshot of ~100 real abstracts (id, title, abstract, url). Open it.
+#   2. Pick an abstract and read it. Find a specific finding/method/result that
+#      lives in the MIDDLE or END of the abstract — NOT the title or first line.
+#      (Answers deep in the text are what test truncation: all-MiniLM cuts the
+#      tail at ~256 tokens; multi-qa reads ~512.)
+#   3. Ask about it in natural language that does NOT reuse the abstract's
+#      distinctive words. Paraphrase hard. (Shared vocabulary makes the task
+#      symmetric, which is exactly the case all-MiniLM already wins.)
+#   4. Label it with that abstract's arXiv `id` from abstracts.json.
+#
+# Good (asymmetric, deep): "Which technique did they use to remove foreground
+#   contamination?"  ->  an abstract whose 4th sentence mentions the method.
+# Weak (symmetric, shallow): "What is this paper about galaxy clusters?"  ->
+#   matches the title; tests nothing.
+#
+# Aim for ~15 queries. Then: `python -m src.eval --analytical`.
+# Tip: paste a batch of abstracts to Claude and ask it to draft questions that
+# target a deep detail and avoid the abstract's wording — then sanity-check them.
+
+queries: []
+  # - query: "How did they correct for the instrument's thermal noise?"
+  #   relevant: ["2506.12345"]   # <- a real id from eval/abstracts.json
+  # - query: "What did the simulation predict about outflow velocities?"
+  #   relevant: ["2506.67890"]
