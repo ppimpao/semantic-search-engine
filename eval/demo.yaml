@@ -1,0 +1,35 @@
+# Similarity-vs-relevance demo (the architecture-decision evidence).
+#
+# Each case pairs a natural-language QUESTION with two candidates:
+#   - restatement: the same question reworded (high surface similarity to the
+#                  query, but it does NOT answer it)
+#   - answer:      the passage that actually answers the question (different
+#                  surface form)
+#
+# A pure-similarity model is drawn to the restatement (it "looks like" the
+# query); a relevance/QA model should rank the answer higher. `eval --demo`
+# reports, per model, how often the answer beats the restatement.
+demos:
+  - query: How many planets are in the Solar System?
+    restatement: How many planets does the Solar System contain?
+    answer: Eight planets orbit the Sun, from Mercury inward to Neptune outward.
+
+  - query: What is the closest star to the Sun?
+    restatement: Which star sits nearest to our Sun?
+    answer: Proxima Centauri, a faint red dwarf about four light years away, is our nearest stellar neighbour.
+
+  - query: What causes the phases of the Moon?
+    restatement: Why does the Moon go through different phases?
+    answer: As the Moon orbits Earth we see varying amounts of its sunlit half, which we perceive as the changing phases.
+
+  - query: Why is the sky blue during the day?
+    restatement: What makes the daytime sky appear blue?
+    answer: Air molecules scatter short-wavelength sunlight far more than long, so light from all directions reaches us tinted blue.
+
+  - query: What is a light year?
+    restatement: Can you explain what a light year means?
+    answer: A light year is the distance light travels in one year, roughly nine and a half trillion kilometres.
+
+  - query: How hot is the surface of the Sun?
+    restatement: What temperature is the Sun's surface?
+    answer: The Sun's visible surface sits at about 5,500 degrees Celsius, far cooler than its multimillion-degree core.

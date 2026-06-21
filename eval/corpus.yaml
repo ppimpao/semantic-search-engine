@@ -235,3 +235,86 @@ documents:
       capture light from the most distant, highly redshifted galaxies. Cooled
       space observatories above the atmosphere are needed because the warm Earth
       and air swamp these faint signals.
+
+  # --- Hard negatives -----------------------------------------------------
+  # Passages deliberately written to share vocabulary with a specific query
+  # while answering a *different* question. They are NOT labelled relevant to
+  # any query, so they act as lexical traps: a model that ranks on surface
+  # similarity is tempted by them, while a relevance/QA model should prefer the
+  # passage that actually answers. (Trap target noted in each comment.)
+
+  - id: c31  # trap for c05 (dark matter / fast-orbiting stars at galaxy edge)
+    title: Hypervelocity stars escaping the galaxy
+    text: >
+      A handful of stars move so fast they will leave the galaxy entirely, flung
+      outward after a close encounter with the supermassive black hole at the
+      Galactic centre. Their extreme speeds trace that violent slingshot, not the
+      smooth orbits of the disk.
+
+  - id: c32  # trap for c16 (liquid water on Mars)
+    title: Water ice in the Moon's polar craters
+    text: >
+      Radar and infrared measurements reveal deposits of frozen water hidden in
+      the permanently shadowed floors of craters at the Moon's poles, never warmed
+      by sunlight. This lunar ice is a potential resource for future crewed
+      missions.
+
+  - id: c33  # trap for c16 (liquid water on Mars)
+    title: Global dust storms on Mars
+    text: >
+      Every few years towering dust storms can swell until they wrap the entire
+      surface of Mars, blotting out the landscape for weeks. The lifted dust warms
+      the upper atmosphere and reshapes the planet's weather.
+
+  - id: c34  # trap for c03 (imaging a black hole's shadow)
+    title: Simulating gas falling into a black hole
+    text: >
+      Numerical relativity codes model how hot plasma spirals inward and is torn
+      apart as it approaches the event horizon of a black hole. These simulations
+      predict how brightly the infalling gas should glow before it disappears.
+
+  - id: c35  # trap for c06 (accelerating expansion / dark energy)
+    title: Cosmic inflation in the first instant
+    text: >
+      In the briefest moment after the Big Bang the universe is thought to have
+      undergone inflation, a burst of exponential expansion that smoothed and
+      flattened space. This early episode is unrelated to the much later speed-up
+      driven by dark energy.
+
+  - id: c36  # trap for c10 (Type Ia supernovae as standard candles)
+    title: Cepheid variables and the distance ladder
+    text: >
+      Cepheid stars pulse with a period locked to their true brightness, so timing
+      their blinking reveals how far away they are. They provide one of the lowest
+      rungs on the cosmic distance ladder, calibrating more distant indicators.
+
+  - id: c37  # trap for c20 (cosmological redshift / Hubble's law)
+    title: Gravitational redshift near massive bodies
+    text: >
+      Light climbing out of a strong gravitational field loses energy and shifts
+      toward longer, redder wavelengths. This gravitational redshift is a
+      prediction of general relativity and is distinct from the stretching caused
+      by cosmic expansion.
+
+  - id: c38  # trap for c25 (fast radio bursts)
+    title: Gamma-ray bursts, the brightest explosions
+    text: >
+      Gamma-ray bursts are fleeting, intensely bright flashes of gamma rays
+      reaching us from distant galaxies, among the most energetic events in the
+      universe. The longer ones mark the collapse of massive stars into black
+      holes.
+
+  - id: c39  # trap for c01 (exoplanet transit photometry)
+    title: How a solar eclipse works
+    text: >
+      A solar eclipse happens when the Moon passes directly in front of the Sun as
+      seen from Earth, briefly blocking its light and casting a shadow on the
+      ground. The alignment lasts only a few minutes along a narrow track.
+
+  - id: c40  # trap for c11 (pulsars / beamed radio emission)
+    title: Radio galaxies and their jets
+    text: >
+      Some galaxies launch enormous jets of plasma that shine brightly at radio
+      wavelengths, stretching far beyond the visible galaxy. The emission is
+      powered by the central black hole, not by any spinning stellar remnant.
+

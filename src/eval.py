@@ -11,11 +11,16 @@ is fully reproducible and runs independently of fetch/ingest.
 
 Run: `python -m src.eval`            # evaluate the QA model
      `python -m src.eval --compare`  # QA model vs pure-similarity model
+     `python -m src.eval --demo`     # answer vs. reworded-question (clean isolation)
 
---compare is the architecture-decision evidence: the same labelled queries
-scored with multi-qa-MiniLM (relevance) vs all-MiniLM (similarity). Because the
-queries are questions and the passages are answers (asymmetric), the QA model
-wins.
+The corpus includes deliberate *hard negatives* (passages c31+) that echo a
+query's wording without answering it, so the set rewards genuine relevance, not
+just topical overlap. --compare scores both models over that set.
+
+--demo is the cleanest architecture evidence: for each case it checks whether a
+model ranks the true ANSWER above a reworded version of the QUESTION. A
+similarity model is pulled toward the look-alike question; a relevance/QA model
+should prefer the answer.
 
 Depends on
 ----------
@@ -88,6 +93,45 @@ def load_queries() -> list[dict]:
     return yaml.safe_load((EVAL_DIR / "queries.yaml").read_text())["queries"]
 
 
+def load_demo() -> list[dict]:
+    """Read the similarity-vs-relevance demo cases from eval/demo.yaml.
+
+    Each case is {query, restatement, answer}; see run_demo for what they test.
+    """
+    return yaml.safe_load((EVAL_DIR / "demo.yaml").read_text())["demos"]
+
+
+def _cos(a: list[float], b: list[float]) -> float:
+    """Cosine similarity of two vectors. embed() returns unit vectors, so the
+    dot product *is* the cosine — no need to divide by norms."""
+    return sum(x * y for x, y in zip(a, b))
+
+
+def run_demo() -> None:
+    """Print the core architecture evidence: answer vs. reworded-question.
+
+    For every demo case and each model, we embed the query, the reworded
+    question (restatement), and the true answer, then check which candidate the
+    query is closer to. A similarity model leans toward the restatement (it
+    looks like the query); a relevance/QA model should prefer the answer. We
+    report how often each model ranks the answer above the restatement.
+    """
+    demos = load_demo()
+    print(f"Similarity-vs-relevance demo — {len(demos)} cases.")
+    print("Does the model rank the ANSWER above a reworded QUESTION?\n")
+    for label, model in [
+        ("multi-qa-MiniLM (relevance/QA)", config.MODEL_NAME),
+        ("all-MiniLM (similarity)", config.SIMILARITY_MODEL_NAME),
+    ]:
+        answer_wins = 0
+        for d in demos:
+            # One batched call: [query, restatement, answer] -> three vectors.
+            qv, rv, av = embed([d["query"], d["restatement"], d["answer"]], model)
+            if _cos(qv, av) > _cos(qv, rv):  # answer closer than the restatement?
+                answer_wins += 1
+        print(f"{label:<34} answer ranked first in {answer_wins}/{len(demos)} cases")
+
+
 def build_collection(corpus: list[dict], embed_fn=embed):
     """Embed the labelled corpus into a throwaway in-memory collection.
 
@@ -120,7 +164,10 @@ def _fmt(name: str, m: dict) -> str:
 
 
 def main() -> None:
-    """CLI entry point: score the QA model, or both models under `--compare`."""
+    """CLI entry point: --demo, --compare, or (default) score the QA model."""
+    if "--demo" in sys.argv:
+        run_demo()
+        return
     corpus, queries = load_corpus(), load_queries()
     if "--compare" in sys.argv:
         print(f"{len(queries)} queries over {len(corpus)} labelled passages:\n")
