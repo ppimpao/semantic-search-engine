@@ -8,11 +8,11 @@ nothing of our own. Change a name or path here and the entire pipeline follows.
 
 Provides for
 ------------
-- `embedder`     : MODEL_NAME / SIMILARITY_MODEL_NAME (which model to load)
+- `embedder`     : MODEL_NAME / QA_MODEL_NAME (which model to load)
 - `store`        : COLLECTION, DISTANCE_SPACE, CHROMA_DIR (which DB to open, how)
 - `fetch_corpus` : RAW_CORPUS (where to cache the download)
 - `ingest`       : RAW_CORPUS (what to read), COLLECTION (where it lands)
-- `eval`         : MODEL_NAME, SIMILARITY_MODEL_NAME, ROOT (to find eval/*.yaml)
+- `eval`         : MODEL_NAME, QA_MODEL_NAME, ROOT (to find eval/*.yaml)
 
 Depends on
 ----------
@@ -22,15 +22,18 @@ Nothing internal — only the standard library.
 from pathlib import Path
 
 # --- Model ---------------------------------------------------------------
-# A *relevance / QA* model (asymmetric query->document), not a pure-similarity
-# model. See README "Architecture & decisions" for why this beats
-# all-MiniLM-L6-v2 for search. Outputs are L2-normalized, so cosine is natural.
-# `embedder.embed()` defaults to this; ingest and search therefore share it.
-MODEL_NAME = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
+# all-MiniLM-L6-v2: a strong general-purpose similarity model. This was chosen
+# *empirically*, not by default. We first hypothesized a relevance/QA model
+# (multi-qa, below), but our eval showed all-MiniLM retrieves arXiv abstracts
+# better: abstract search is effectively a *symmetric* task (queries reuse the
+# answer's vocabulary), so the QA model's surface-insensitivity backfired. See
+# README "How I measured it". Outputs are L2-normalized, so cosine is natural.
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
-# The pure-similarity baseline. Used *only* by `eval --compare` to demonstrate,
-# with numbers, why the QA model above is the right choice for search.
-SIMILARITY_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# The relevance/QA alternative. Kept for the eval comparison and as the expected
+# default for Phase 3 (long-document RAG), where retrieval is genuinely
+# asymmetric and this model's training should pay off.
+QA_MODEL_NAME = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
 
 # --- Vector store --------------------------------------------------------
 COLLECTION = "astro_ph"            # the named collection inside the Chroma DB
