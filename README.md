@@ -302,6 +302,9 @@ eval/abstracts.json  frozen real-abstract corpus for Test 3 (created by --freeze
 tests/test_pipeline.py  offline smoke test + metrics, via an injected fake embedder
 ```
 
+## A note on process
+This project was built with AI assistance, used as collaboration for the implementation. The architecture, the evaluation design — including the decision to add hard negatives and to re-test at production length (200-word abstracts) — the interpretation of results, and every decision documented above are mine. The eval that overturned my own model hypothesis is the clearest evidence of which parts I did.
+
 ## Future work
 
 - **Hybrid search (BM25 + dense)** — add only if eval shows exact-term queries
